@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"time"
@@ -21,6 +22,67 @@ import (
 
 var api *webrtc.API //nolint
 
+type candidatePair struct {
+	localID  string
+	remoteID string
+}
+
+type setCandidateStats struct {
+	candidates              []webrtc.ICECandidateStats
+	nominatedCandidatePairs []candidatePair
+}
+
+func newSetCandidateStats(pc *webrtc.PeerConnection) setCandidateStats {
+	stats := pc.GetStats()
+	nominatedCandidatePairs := []candidatePair{}
+	candidates := []webrtc.ICECandidateStats{}
+	for _, v := range stats {
+		switch t := v.(type) {
+		case webrtc.ICECandidatePairStats:
+			candidatePair := candidatePair{}
+			if t.Nominated {
+				candidatePair.localID = t.LocalCandidateID
+				candidatePair.remoteID = t.RemoteCandidateID
+				nominatedCandidatePairs = append(nominatedCandidatePairs, candidatePair)
+			}
+		case webrtc.ICECandidateStats:
+			candidates = append(candidates, t)
+		}
+	}
+	return setCandidateStats{
+		candidates:              candidates,
+		nominatedCandidatePairs: nominatedCandidatePairs,
+	}
+}
+
+func (scs setCandidateStats) getCandidateStats(id string) webrtc.ICECandidateStats {
+	for _, c := range scs.candidates {
+		if c.ID == id {
+			return c
+		}
+	}
+	return webrtc.ICECandidateStats{}
+}
+
+func (scs setCandidateStats) getPriority(lp int32, rp int32) uint64 {
+	return uint64((1<<32-1)*math.Min(float64(rp), float64(lp)) + 2*math.Max(float64(rp), float64(lp)))
+}
+
+func (scs setCandidateStats) getSetCandidates() []interface{} {
+	setCandidates := make([]interface{}, len(scs.nominatedCandidatePairs))
+	for _, ncp := range scs.nominatedCandidatePairs {
+		fmt.Printf("NCP: %v\n", ncp)
+		localCandidate := scs.getCandidateStats(ncp.localID)
+		remoteCandidate := scs.getCandidateStats(ncp.remoteID)
+		priority := scs.getPriority(localCandidate.Priority, remoteCandidate.Priority)
+		setCandidates = append(setCandidates, []interface{}{
+			priority,
+			localCandidate.NetworkType, localCandidate.Protocol, localCandidate.CandidateType, localCandidate.IP, localCandidate.Port, localCandidate.RelayProtocol,
+			remoteCandidate.NetworkType, remoteCandidate.Protocol, remoteCandidate.CandidateType, remoteCandidate.IP, remoteCandidate.Port, remoteCandidate.RelayProtocol,
+		})
+	}
+	return setCandidates
+}
 func doSignaling(w http.ResponseWriter, r *http.Request) {
 	peerConnection, err := api.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
@@ -31,6 +93,12 @@ func doSignaling(w http.ResponseWriter, r *http.Request) {
 	// This will notify you when the peer has connected/disconnected
 	peerConnection.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
 		fmt.Printf("ICE Connection State has changed: %s\n", connectionState.String())
+		cps := newSetCandidateStats(peerConnection)
+		fmt.Printf("STATS: %v\n", cps.getSetCandidates())
+
+		fmt.Printf("NOMINATED CANDIDATES:\n%v\n", cps.nominatedCandidatePairs)
+
+		fmt.Printf("CANDIDATES: %v\n", cps.candidates)
 	})
 
 	// Send the current time via a DataChannel to the remote peer every 3 seconds
