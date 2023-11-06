@@ -5,10 +5,10 @@ package webrtc
 
 import "strings"
 
-// getICEServers side-steps the strict parsing mode of the ice package
+// GetICEServers side-steps the strict parsing mode of the ice package
 // (as defined in https://tools.ietf.org/html/rfc7064) by copying and then
 // stripping any erroneous queries from "stun(s):" URLs before parsing.
-func (c Configuration) getICEServers() []ICEServer {
+func (c Configuration) GetICEServers() []ICEServer {
 	iceServers := append([]ICEServer{}, c.ICEServers...)
 
 	for iceServersIndex := range iceServers {

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestConfiguration_getICEServers(t *testing.T) {
+func TestConfiguration_GetICEServers(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		expectedServerStr := "stun:stun.l.google.com:19302"
 		cfg := Configuration{
@@ -21,7 +21,7 @@ func TestConfiguration_getICEServers(t *testing.T) {
 			},
 		}
 
-		parsedURLs := cfg.getICEServers()
+		parsedURLs := cfg.GetICEServers()
 		assert.Equal(t, expectedServerStr, parsedURLs[0].URLs[0])
 	})
 
@@ -37,7 +37,7 @@ func TestConfiguration_getICEServers(t *testing.T) {
 			},
 		}
 
-		parsedURLs := cfg.getICEServers()
+		parsedURLs := cfg.GetICEServers()
 		assert.Equal(t, expectedServerStr, parsedURLs[0].URLs[0])
 	})
 }

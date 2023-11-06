@@ -107,11 +107,11 @@ func NewPeerConnection(configuration Configuration) (*PeerConnection, error) {
 	}
 
 	api := NewAPI(WithMediaEngine(m), WithInterceptorRegistry(i))
-	return api.NewPeerConnection(configuration)
+	return api.NewPeerConnection(configuration, nil)
 }
 
 // NewPeerConnection creates a new PeerConnection with the provided configuration against the received API object
-func (api *API) NewPeerConnection(configuration Configuration) (*PeerConnection, error) {
+func (api *API) NewPeerConnection(configuration Configuration, iceGatherer *ICEGatherer) (*PeerConnection, error) {
 	// https://w3c.github.io/webrtc-pc/#constructor (Step #2)
 	// Some variables defined explicitly despite their implicit zero values to
 	// allow better readability to understand what is happening.
@@ -160,9 +160,14 @@ func (api *API) NewPeerConnection(configuration Configuration) (*PeerConnection,
 		return nil, err
 	}
 
-	pc.iceGatherer, err = pc.createICEGatherer()
-	if err != nil {
-		return nil, err
+	if iceGatherer == nil {
+		pc.iceGatherer, err = pc.createICEGatherer()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		fmt.Println("Setting ICE Gatherer")
+		pc.iceGatherer = iceGatherer
 	}
 
 	// Create the ice transport
@@ -245,7 +250,7 @@ func (pc *PeerConnection) initConfiguration(configuration Configuration) error {
 		pc.configuration.SDPSemantics = configuration.SDPSemantics
 	}
 
-	sanitizedICEServers := configuration.getICEServers()
+	sanitizedICEServers := configuration.GetICEServers()
 	if len(sanitizedICEServers) > 0 {
 		for _, server := range sanitizedICEServers {
 			if err := server.validate(); err != nil {
@@ -723,7 +728,7 @@ func (pc *PeerConnection) CreateOffer(options *OfferOptions) (SessionDescription
 
 func (pc *PeerConnection) createICEGatherer() (*ICEGatherer, error) {
 	g, err := pc.api.NewICEGatherer(ICEGatherOptions{
-		ICEServers:      pc.configuration.getICEServers(),
+		ICEServers:      pc.configuration.GetICEServers(),
 		ICEGatherPolicy: pc.configuration.ICETransportPolicy,
 	})
 	if err != nil {
@@ -1017,6 +1022,7 @@ func (pc *PeerConnection) SetLocalDescription(desc SessionDescription) error {
 	}
 
 	if pc.iceGatherer.State() == ICEGathererStateNew {
+		fmt.Println("ICE GATHERER = NEW")
 		return pc.iceGatherer.Gather()
 	}
 	return nil
