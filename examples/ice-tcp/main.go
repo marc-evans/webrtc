@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"time"
 
@@ -21,68 +20,68 @@ import (
 
 var api *webrtc.API //nolint
 
-type candidatePair struct {
-	localID  string
-	remoteID string
-}
+// type candidatePair struct {
+// 	localID  string
+// 	remoteID string
+// }
 
-type setCandidateStats struct {
-	candidates              []webrtc.ICECandidateStats
-	nominatedCandidatePairs []candidatePair
-}
+// type setCandidateStats struct {
+// 	candidates              []webrtc.ICECandidateStats
+// 	nominatedCandidatePairs []candidatePair
+// }
 
-func newSetCandidateStats(pc *webrtc.PeerConnection) setCandidateStats {
-	stats := pc.GetStats()
-	fmt.Printf("\nStats:\n%+v\n", stats)
-	nominatedCandidatePairs := []candidatePair{}
-	candidates := []webrtc.ICECandidateStats{}
-	for _, v := range stats {
-		switch t := v.(type) {
-		case webrtc.ICECandidatePairStats:
-			candidatePair := candidatePair{}
-			if t.Nominated {
-				candidatePair.localID = t.LocalCandidateID
-				candidatePair.remoteID = t.RemoteCandidateID
-				nominatedCandidatePairs = append(nominatedCandidatePairs, candidatePair)
-			}
-		case webrtc.ICECandidateStats:
-			candidates = append(candidates, t)
-		}
-	}
-	return setCandidateStats{
-		candidates:              candidates,
-		nominatedCandidatePairs: nominatedCandidatePairs,
-	}
-}
+// func newSetCandidateStats(pc *webrtc.PeerConnection) setCandidateStats {
+// 	stats := pc.GetStats()
+// 	fmt.Printf("\nStats:\n%+v\n", stats)
+// 	nominatedCandidatePairs := []candidatePair{}
+// 	candidates := []webrtc.ICECandidateStats{}
+// 	for _, v := range stats {
+// 		switch t := v.(type) {
+// 		case webrtc.ICECandidatePairStats:
+// 			candidatePair := candidatePair{}
+// 			if t.Nominated {
+// 				candidatePair.localID = t.LocalCandidateID
+// 				candidatePair.remoteID = t.RemoteCandidateID
+// 				nominatedCandidatePairs = append(nominatedCandidatePairs, candidatePair)
+// 			}
+// 		case webrtc.ICECandidateStats:
+// 			candidates = append(candidates, t)
+// 		}
+// 	}
+// 	return setCandidateStats{
+// 		candidates:              candidates,
+// 		nominatedCandidatePairs: nominatedCandidatePairs,
+// 	}
+// }
 
-func (scs setCandidateStats) getCandidateStats(id string) webrtc.ICECandidateStats {
-	for _, c := range scs.candidates {
-		if c.ID == id {
-			return c
-		}
-	}
-	return webrtc.ICECandidateStats{}
-}
+// func (scs setCandidateStats) getCandidateStats(id string) webrtc.ICECandidateStats {
+// 	for _, c := range scs.candidates {
+// 		if c.ID == id {
+// 			return c
+// 		}
+// 	}
+// 	return webrtc.ICECandidateStats{}
+// }
 
-func (scs setCandidateStats) getPriority(lp int32, rp int32) uint64 {
-	return uint64((1<<32-1)*math.Min(float64(rp), float64(lp)) + 2*math.Max(float64(rp), float64(lp)))
-}
+// func (scs setCandidateStats) getPriority(lp int32, rp int32) uint64 {
+// 	return uint64((1<<32-1)*math.Min(float64(rp), float64(lp)) + 2*math.Max(float64(rp), float64(lp)))
+// }
 
-func (scs setCandidateStats) getSetCandidates() []interface{} {
-	setCandidates := make([]interface{}, len(scs.nominatedCandidatePairs))
-	for _, ncp := range scs.nominatedCandidatePairs {
-		fmt.Printf("NCP: %v\n", ncp)
-		localCandidate := scs.getCandidateStats(ncp.localID)
-		remoteCandidate := scs.getCandidateStats(ncp.remoteID)
-		priority := scs.getPriority(localCandidate.Priority, remoteCandidate.Priority)
-		setCandidates = append(setCandidates, []interface{}{
-			priority,
-			localCandidate.NetworkType, localCandidate.Protocol, localCandidate.CandidateType, localCandidate.IP, localCandidate.Port, localCandidate.RelayProtocol,
-			remoteCandidate.NetworkType, remoteCandidate.Protocol, remoteCandidate.CandidateType, remoteCandidate.IP, remoteCandidate.Port, remoteCandidate.RelayProtocol,
-		})
-	}
-	return setCandidates
-}
+// func (scs setCandidateStats) getSetCandidates() []interface{} {
+// 	setCandidates := make([]interface{}, len(scs.nominatedCandidatePairs))
+// 	for _, ncp := range scs.nominatedCandidatePairs {
+// 		fmt.Printf("NCP: %v\n", ncp)
+// 		localCandidate := scs.getCandidateStats(ncp.localID)
+// 		remoteCandidate := scs.getCandidateStats(ncp.remoteID)
+// 		priority := scs.getPriority(localCandidate.Priority, remoteCandidate.Priority)
+// 		setCandidates = append(setCandidates, []interface{}{
+// 			priority,
+// 			localCandidate.NetworkType, localCandidate.Protocol, localCandidate.CandidateType, localCandidate.IP, localCandidate.Port, localCandidate.RelayProtocol,
+// 			remoteCandidate.NetworkType, remoteCandidate.Protocol, remoteCandidate.CandidateType, remoteCandidate.IP, remoteCandidate.Port, remoteCandidate.RelayProtocol,
+// 		})
+// 	}
+// 	return setCandidates
+// }
 
 func setupIceGatherer(config webrtc.Configuration) *webrtc.ICEGatherer {
 	iceGatherer, err := api.NewICEGatherer(webrtc.ICEGatherOptions{
@@ -201,33 +200,33 @@ func main() {
 			{
 				URLs: []string{"stun:stun.l.google.com:19302"},
 			},
-			// {
-			// 	URLs: []string{"stun:stun.relay.metered.ca:80"},
-			// },
-			// {
-			// 	URLs:           []string{"turn:a.relay.metered.ca:80"},
-			// 	Username:       "260c1e9bf48fcaebdf5afe73",
-			// 	Credential:     "m96icXIJGrbXxRAk",
-			// 	CredentialType: webrtc.ICECredentialTypePassword,
-			// },
-			// {
-			// 	URLs:           []string{"turn:a.relay.metered.ca:80?transport=tcp"},
-			// 	Username:       "260c1e9bf48fcaebdf5afe73",
-			// 	Credential:     "m96icXIJGrbXxRAk",
-			// 	CredentialType: webrtc.ICECredentialTypePassword,
-			// },
-			// {
-			// 	URLs:           []string{"turn:a.relay.metered.ca:443"},
-			// 	Username:       "260c1e9bf48fcaebdf5afe73",
-			// 	Credential:     "m96icXIJGrbXxRAk",
-			// 	CredentialType: webrtc.ICECredentialTypePassword,
-			// },
-			// {
-			// 	URLs:           []string{"turn:a.relay.metered.ca:443?transport=tcp"},
-			// 	Username:       "260c1e9bf48fcaebdf5afe73",
-			// 	Credential:     "m96icXIJGrbXxRAk",
-			// 	CredentialType: webrtc.ICECredentialTypePassword,
-			// },
+			{
+				URLs: []string{"stun:stun.relay.metered.ca:80"},
+			},
+			{
+				URLs:           []string{"turn:a.relay.metered.ca:80"},
+				Username:       "260c1e9bf48fcaebdf5afe73",
+				Credential:     "m96icXIJGrbXxRAk",
+				CredentialType: webrtc.ICECredentialTypePassword,
+			},
+			{
+				URLs:           []string{"turn:a.relay.metered.ca:80?transport=tcp"},
+				Username:       "260c1e9bf48fcaebdf5afe73",
+				Credential:     "m96icXIJGrbXxRAk",
+				CredentialType: webrtc.ICECredentialTypePassword,
+			},
+			{
+				URLs:           []string{"turn:a.relay.metered.ca:443"},
+				Username:       "260c1e9bf48fcaebdf5afe73",
+				Credential:     "m96icXIJGrbXxRAk",
+				CredentialType: webrtc.ICECredentialTypePassword,
+			},
+			{
+				URLs:           []string{"turn:a.relay.metered.ca:443?transport=tcp"},
+				Username:       "260c1e9bf48fcaebdf5afe73",
+				Credential:     "m96icXIJGrbXxRAk",
+				CredentialType: webrtc.ICECredentialTypePassword,
+			},
 		},
 		ICETransportPolicy: webrtc.NewICETransportPolicy("all"),
 		BundlePolicy:       webrtc.BundlePolicyBalanced,
