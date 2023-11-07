@@ -92,20 +92,22 @@ func setupIceGatherer(config webrtc.Configuration) *webrtc.ICEGatherer {
 		fmt.Printf("Could not create ICE gatherer: %s\n", err)
 		return nil
 	}
+
+	iceGatherer.OnLocalCandidate(func(i *webrtc.ICECandidate) {
+		fmt.Printf("Retrieved ICE candidate: %s\n", i)
+	})
+
 	iceGatherer.Gather()
 
 	go func() {
 		t := time.NewTicker(time.Millisecond * 500)
 	GATHERING:
-		for {
-			select {
-			case <-t.C:
-				s := iceGatherer.State()
-				if s == webrtc.ICEGathererStateComplete {
-					c, _ := iceGatherer.GetLocalCandidates()
-					fmt.Printf("Ice Gatherer State: %v\n", c)
-					break GATHERING
-				}
+		for range t.C {
+			s := iceGatherer.State()
+			if s == webrtc.ICEGathererStateComplete {
+				c, _ := iceGatherer.GetLocalCandidates()
+				fmt.Printf("Ice Gatherer State: %v\n", c)
+				break GATHERING
 			}
 		}
 
@@ -122,30 +124,43 @@ func setupIceGatherer(config webrtc.Configuration) *webrtc.ICEGatherer {
 
 func doSignaling(config webrtc.Configuration, iceGatherer *webrtc.ICEGatherer) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+
+		ts := newTimedState()
+
 		peerConnection, err := api.NewPeerConnection(config, iceGatherer)
 		if err != nil {
 			panic(err)
 		}
 
+		ts.add("newPeerConnection")
+
 		// Set the handler for ICE connection state
 		// This will notify you when the peer has connected/disconnected
 		peerConnection.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
-			fmt.Printf("ICE Connection State has changed: %s\n", connectionState.String())
-			// cps := newSetCandidateStats(peerConnection)
-			// fmt.Printf("STATS: %v\n", cps.getSetCandidates())
+			if connectionState == webrtc.ICEConnectionStateChecking {
+				ts.add("ICEConnectionChecking")
+			}
+			if connectionState == webrtc.ICEConnectionStateCompleted {
+				ts.add("ICEConnectionCompleted")
+			}
+		})
 
-			// fmt.Printf("NOMINATED CANDIDATES:\n%v\n", cps.nominatedCandidatePairs)
-
-			// fmt.Printf("CANDIDATES: %v\n", cps.candidates)
-
-			fmt.Printf("\nStats:\n%+v\n", peerConnection.GetStats())
+		peerConnection.OnConnectionStateChange(func(pcs webrtc.PeerConnectionState) {
+			if pcs == webrtc.PeerConnectionStateConnecting {
+				ts.add("PeerConnectionConnecting")
+			}
+			if pcs == webrtc.PeerConnectionStateConnected {
+				ts.add("PeerConnectionConnected")
+			}
+			if pcs == webrtc.PeerConnectionStateClosed {
+				ts.add("PeerConnectionClosed")
+			}
 		})
 
 		// Send the current time via a DataChannel to the remote peer every 3 seconds
 		peerConnection.OnDataChannel(func(d *webrtc.DataChannel) {
 			d.OnOpen(func() {
 				for range time.Tick(time.Second * 3) {
-					fmt.Printf("\nStats:\n%+v\n", peerConnection.GetStats())
 					if err = d.SendText(time.Now().String()); err != nil {
 						if errors.Is(io.ErrClosedPipe, err) {
 							return
@@ -165,6 +180,8 @@ func doSignaling(config webrtc.Configuration, iceGatherer *webrtc.ICEGatherer) f
 			panic(err)
 		}
 
+		ts.add("setRemoteDescription")
+
 		// Create channel that is blocked until ICE Gathering is complete
 		gatherComplete := webrtc.GatheringCompletePromise(peerConnection)
 
@@ -175,12 +192,14 @@ func doSignaling(config webrtc.Configuration, iceGatherer *webrtc.ICEGatherer) f
 			panic(err)
 		}
 
+		ts.add("setLocalDescription")
+
 		// Block until ICE Gathering is complete, disabling trickle ICE
 		// we do this because we only can exchange one signaling message
 		// in a production application you should exchange ICE Candidates via OnICECandidate
 		<-gatherComplete
 
-		fmt.Printf("LOCAL DESCRIPTION: %+v\n", *peerConnection.LocalDescription())
+		ts.add("gatherComplete")
 
 		response, err := json.Marshal(*peerConnection.LocalDescription())
 		if err != nil {
@@ -191,7 +210,24 @@ func doSignaling(config webrtc.Configuration, iceGatherer *webrtc.ICEGatherer) f
 		if _, err := w.Write(response); err != nil {
 			panic(err)
 		}
+
+		ts.add("answerSent")
 	}
+}
+
+type timedstate struct {
+	startTime time.Time
+	states    map[string]time.Duration
+}
+
+func newTimedState() *timedstate {
+	return &timedstate{time.Now(), make(map[string]time.Duration)}
+}
+
+func (ts *timedstate) add(s string) {
+	d := time.Since(ts.startTime)
+	ts.states[s] = d
+	fmt.Printf("Added timedstate %s:%s\n", s, d)
 }
 
 func main() {
